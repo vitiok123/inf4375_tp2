@@ -5,6 +5,7 @@ import ca.disks.records.security.XmlDecryption;
 import ca.disks.records.security.XmlEncryption;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
@@ -16,31 +17,49 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import net.sf.json.JSONArray;
-import org.w3c.dom.*;
 import net.sf.json.JSONObject;
-import net.sf.json.JSONSerializer;
+import org.w3c.dom.*;
 
 
 public class Inventaire {
 
+    private static Inventaire instance = null;
     private Document document;
     private String path;
     private int ID;
     private String erreur;
 
-    public Inventaire(String path) {
-        decryptDocument(path);
+    public synchronized static Inventaire getInstance(){
+        if ( instance == null ){
+            instance = new Inventaire();
+        }
+        return instance;
+    }
+    
+    public Inventaire() {
+        decryptDocument("D:\\Uqam\\INF4375\\inf4375_tp2\\InvetaireServices\\db\\data.xml");
         this.path = path;
         ID = getNombreAlbums();
     }
+
     
     private void decryptDocument(String path){
         try {
             EncryptionKey decryptKey = new EncryptionKey();
-            decryptKey.loadFromFile("db/encryption.key");
+            decryptKey.loadFromFile("D:\\Uqam\\INF4375\\inf4375_tp2\\InvetaireServices\\db\\encryption.key");
             XmlDecryption decrypter = new XmlDecryption();
             decrypter.decryptXmlDocument(path, decryptKey.getKey());
             document = decrypter.getDocument();
+            
+            StringWriter sw = new StringWriter();
+            StreamResult result = new StreamResult(sw);
+            DOMSource source = new DOMSource(document);
+            TransformerFactory transfac = TransformerFactory.newInstance();
+            Transformer trans = transfac.newTransformer();
+            trans.transform(source, result);
+            String xmlString = sw.toString();
+            
+            System.out.println(xmlString);
         } catch (Exception ex) {
             Logger.getLogger(Inventaire.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -108,7 +127,7 @@ public class Inventaire {
     
     public int modifierQuantite(int id, int quantite){
         //int ancientQte;
-        Element album = getAlbum(id);
+        Element album = obtenirAlbum(id);
         if(album != null){
             //ancientQte = Integer.parseInt(album.getElementsByTagName("qte").item(0).getTextContent());
             album.getElementsByTagName("qte").item(0).setTextContent(Integer.toString(quantite));
@@ -117,13 +136,18 @@ public class Inventaire {
         return -1;
     }
 
-//    public String listeAlbums(){
-//        
-//        
-//    }
+    public String listeAlbums(){
+        
+        return jsonArtistes(obtenirAlbumsParArtiste());
+    }
+    
+    public String obtenirStock(){
+        
+        return jsonStock();
+    }
     
     private Map<String, Artiste> obtenirAlbumsParArtiste(){
-        Map<String, Artiste> artistes = new HashMap<String, Artiste>();
+        Map<String, Artiste> artistes = new TreeMap<String, Artiste>();
         NodeList listeAlbums = document.getElementsByTagName("album");
         for(int i = 0; i < listeAlbums.getLength(); ++i){
             String artiste = ((Element)listeAlbums.item(i)).getElementsByTagName("artiste").item(0).getTextContent();
@@ -146,11 +170,60 @@ public class Inventaire {
         return artistes;
     }
     
-//    private String obtenirJson(Map<String, Artiste> artistes){
-//        Map<String, Artiste> artistesTrie = new TreeMap<String, Artiste>(artistes);
-//        JSONObject jsonResultat = new JSONObject();
-////        jsonResultat.acc
-//    }
+    private String jsonArtistes(Map<String, Artiste> artistes){
+        Map<String, Artiste> artistesTrie = new TreeMap<String, Artiste>(artistes);
+        JSONObject jsonResultat = new JSONObject();
+        JSONArray jsonArtistes = new JSONArray();
+        for (String nome : artistesTrie.keySet()) {
+            Artiste artiste = artistesTrie.get(nome);
+            JSONObject jsonArtiste = new JSONObject();
+            jsonArtiste.put("nom", nome);
+            JSONArray jsonAlbums = new JSONArray();
+            for(Integer annee : artiste.getAlbums().keySet()){
+                Album album = artiste.getAlbums().get(annee);
+                JSONObject newAlbum = new JSONObject();
+                newAlbum.put("id", album.getId());
+                newAlbum.put("titre", album.getTitre());
+                newAlbum.put("annee", album.getAnnee());
+                newAlbum.put("qte", album.getQuantite());
+                jsonAlbums.add(newAlbum);
+            }
+            jsonArtiste.accumulate("albums", jsonAlbums);
+            jsonArtistes.add(jsonArtiste);
+        }
+        jsonResultat.accumulate("artistes", jsonArtistes);
+        
+        return jsonResultat.toString(2);
+    }
+    
+    private String jsonStock(){
+        JSONObject jsonResultat = new JSONObject();
+        jsonResultat.put("type", "stock");
+        jsonResultat.put("nbAlbums", obtenirNbAlbums());
+        jsonResultat.put("qte", obtenirQte());
+        jsonResultat.put("nbArtistes", obtenirNbArtiste());
+        
+        return jsonResultat.toString(2);
+    }
+    
+    private Integer obtenirNbAlbums() {
+        NodeList listeAlbums = document.getElementsByTagName("album");
+        return listeAlbums.getLength();
+    }
+    
+    private Integer obtenirQte(){
+        NodeList listeAlbums = document.getElementsByTagName("album");
+        int qteTotale = 0;
+        for(int i = 0; i < listeAlbums.getLength(); ++i){
+            int qte = Integer.parseInt(((Element)listeAlbums.item(i)).getElementsByTagName("qte").item(0).getTextContent());
+            qteTotale += qte;
+        }
+        return qteTotale;
+    }
+    
+    private Integer obtenirNbArtiste(){
+        return obtenirAlbumsParArtiste().size();
+    }
     
     private Album creerAlbum(Element album){
         int id = Integer.parseInt(album.getElementsByTagName("id").item(0).getTextContent());
@@ -177,7 +250,7 @@ public class Inventaire {
         return false;
     }
     
-    private Element getAlbum(int id){
+    private Element obtenirAlbum(int id){
         NodeList listeAlbums = document.getElementsByTagName("album");
         if(listeAlbums != null){
             for(int i = 0; i < listeAlbums.getLength(); ++i){

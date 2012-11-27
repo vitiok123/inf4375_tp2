@@ -11,7 +11,7 @@ import javax.ws.rs.core.Application;
  *
  * @author Vitiok
  */
-@javax.ws.rs.ApplicationPath("webresources")
+@javax.ws.rs.ApplicationPath("boutique")
 public class ApplicationConfig extends Application {
 
     public Set<Class<?>> getClasses() {

@@ -1,8 +1,13 @@
 package ca.disks.records.security;
 
+import java.io.StringWriter;
 import java.security.Key;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import org.apache.xml.security.encryption.XMLCipher;
 import org.apache.xml.security.utils.EncryptionConstants;
 import org.w3c.dom.Document;
@@ -22,6 +27,16 @@ public class XmlDecryption {
         documentFactory.setNamespaceAware(true);
         DocumentBuilder builder = documentFactory.newDocumentBuilder();
         document = builder.parse(path);
+        
+        StringWriter sw = new StringWriter();
+        StreamResult result = new StreamResult(sw);
+        DOMSource source = new DOMSource(document);
+        TransformerFactory transfac = TransformerFactory.newInstance();
+        Transformer trans = transfac.newTransformer();
+        trans.transform(source, result);
+        String xmlString = sw.toString();
+        System.out.println(xmlString);
+        
         decryptDocument(encryptionKey);
     }
     
